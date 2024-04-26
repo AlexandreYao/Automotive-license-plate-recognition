@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 
 
 class CustomDataset(Dataset):
@@ -44,18 +44,3 @@ class CustomDataset(Dataset):
                     annotations = self.load_annotations(annotation_path)
                     data.append((image_path, annotations))
         return data
-
-
-def create_dataloader(image_folder, annotation_folder, batch_size=32, image_size=416):
-    dataset = CustomDataset(image_folder, annotation_folder, image_size=image_size)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-    return dataloader
-
-
-# Exemple d'utilisation :
-image_folder = "data/images"
-annotation_folder = "data/annotations"
-batch_size = 32
-image_size = 416
-dataloader = create_dataloader(image_folder, annotation_folder, batch_size, image_size)
-# Maintenant vous pouvez itérer sur dataloader pour entraîner votre modèle
