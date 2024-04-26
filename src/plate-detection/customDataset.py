@@ -17,21 +17,30 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         image_path, annotations = self.data[idx]
-        image = cv2.imread(image_path)
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # Charger l'image en niveau de gris
+        image = cv2.imread(image_path, cv2.IMREAD_GRAYSCALE)
+        # image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        # Récupérer les dimensions originales de l'image
+        original_image_size = image.shape[:2]
+        # Redimensionner l'image
         image = cv2.resize(image, (self.image_size, self.image_size))
-        image = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0
+        # Convertir l'image en tenseur et normaliser
+        image = torch.tensor(image, dtype=torch.float32).unsqueeze(0) / 255.0
+        
+        # image = torch.tensor(image, dtype=torch.float32).permute(2, 0, 1) / 255.0
+        # Convertir les annotations au format YOLO en coordonnées de coins de rectangle
+        annotations = self.convert_yolo_to_corners(annotations, original_image_size)
         annotations = torch.tensor(annotations, dtype=torch.float32)
         return image, annotations
 
     def load_annotations(self, annotation_file):
         with open(annotation_file, "r") as f:
             lines = f.readlines()
-        annotations = []
-        for line in lines:
-            parts = line.strip().split()
-            annotations.append([float(parts[i]) for i in range(1, len(parts))])
-        return np.array(annotations)
+        # une seule ligne dans le fichier d'annotations
+        line = lines[0].strip().split()
+        annotation = [float(line[i]) for i in range(1, len(line))]
+        return np.array(annotation)
+
 
     def preprocess_data(self):
         data = []
@@ -44,3 +53,25 @@ class CustomDataset(Dataset):
                     annotations = self.load_annotations(annotation_path)
                     data.append((image_path, annotations))
         return data
+
+    def convert_yolo_to_corners(self, annotation, original_image_size):
+        # Taille de l'image originale
+        original_width, original_height = original_image_size
+        # Taille de l'image redimensionnée
+        resized_width, resized_height = self.image_size, self.image_size
+        
+        # Ajuster les coordonnées YOLO en fonction de la taille réelle de l'image
+        x_center, y_center, width, height = annotation
+        x_min = (x_center - width / 2) * original_width
+        y_min = (y_center - height / 2) * original_height
+        x_max = (x_center + width / 2) * original_width
+        y_max = (y_center + height / 2) * original_height
+        
+        # Redimensionner les coordonnées en fonction de la taille de l'image redimensionnée
+        x_min_resized = x_min * resized_width / original_width
+        y_min_resized = y_min * resized_height / original_height
+        x_max_resized = x_max * resized_width / original_width
+        y_max_resized = y_max * resized_height / original_height
+        
+        # Retourner les coordonnées de la bounding box redimensionnée
+        return [x_min_resized, y_min_resized, x_max_resized, y_max_resized]
