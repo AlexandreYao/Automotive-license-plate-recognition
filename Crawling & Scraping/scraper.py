@@ -3,6 +3,7 @@ import pandas as pd
 import urllib.request
 from bs4 import BeautifulSoup
 import time
+from random import randint
 import errno
 
 class LicensePlateScraper:
@@ -118,9 +119,9 @@ class LicensePlateScraper:
             with open(pages_file_name, "w") as file:
                 file.write(",".join(map(str, paginations)))
             print(f"\t...scrapping {url} done {len(paginations)}!")
-            time.sleep(20)
+            time.sleep(randint(1, 10))
 
 
 # Usage of the LicensePlateScraper class
-scraper = LicensePlateScraper(country="de")
+scraper = LicensePlateScraper(country="pl")
 scraper.parse()

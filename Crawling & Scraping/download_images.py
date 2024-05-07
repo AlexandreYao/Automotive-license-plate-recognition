@@ -4,7 +4,7 @@ import os
 import time
 from random import randint
 
-country = "de"
+country = "pl"
 df = pd.read_csv(rf"..\data\data\data_{country}.csv")
 save_dir = rf"..\data\images\cars\{country}"
 if not os.path.exists(save_dir):
