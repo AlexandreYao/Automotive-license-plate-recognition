@@ -3,14 +3,17 @@ import math
 import numpy as np
 import torch.nn as nn
 
+
 def bbox_iou(box1, box2, center_width_height=True):
     """
     Calcule l'Intersection sur Union (IoU) de deux boîtes englobantes.
-    Args:
+
+    Args :
         box1 (torch.Tensor): Tensor représentant les coordonnées de la première boîte englobante.
         box2 (torch.Tensor): Tensor représentant les coordonnées de la deuxième boîte englobante.
         center_width_height (bool): Indique si les boîtes englobantes sont représentées sous forme de (x_centre, y_centre, largeur, hauteur) ou (x1, y1, x2, y2).
-    Returns:
+    
+    Returns :
         torch.Tensor: Valeur de l'IoU pour chaque paire de boîtes englobantes.
     """
     if center_width_height:
@@ -89,26 +92,53 @@ def build_targets(targets, anchors, grid_size, num_anchors=3):
     return mask, tx, ty, tw, th, tconf
 
 
-def loss(input, target, anchors, inp_dim, num_anchors=3):
-    num_batches = input.size(0)  # number of batches
-    grid_size = input.size(2)  # number of grid size
-    stride = inp_dim / grid_size
+def loss(input, target, anchors, inp_dim):
+    """
+    Calcule la perte (loss) pour un modèle de détection d'objets utilisant l'algorithme YOLO (You Only Look Once).
+    Args:
+        input (torch.Tensor): Tenseur contenant les prédictions du modèle.
+        target (torch.Tensor): Tenseur contenant les annotations de vérité terrain pour chaque image.
+        anchors (list): Liste des ancres utilisées pour la détection.
+        inp_dim (int): Dimension de l'entrée du modèle.
+        num_anchors (int): Nombre d'ancres utilisées pour chaque cellule de la grille.
+    Returns:
+        tuple: Un tuple contenant la perte totale ainsi que les pertes individuelles pour les coordonnées, les largeurs, les hauteurs et les confiances.
+    """
+    num_batches = input.size(0)  # Nombre de batchs
+    num_anchors = len(anchors) # Nombrer d'anchres
+    grid_size = input.size(2)  # Taille de la grille
+    stride = inp_dim / grid_size  # Calcul du pas
     prediction = (
-        input.view(num_batches, num_anchors, 5, grid_size, grid_size).permute(0, 1, 3, 4, 2).contiguous()
-    )  # reshape the output data
-    # Get outputs
-    x = torch.sigmoid(prediction[..., 0])  # Center x
-    y = torch.sigmoid(prediction[..., 1])  # Center y
-    w = prediction[..., 2]  # Width
-    h = prediction[..., 3]  # Height
-    pred_conf = torch.sigmoid(prediction[..., 4])  # Conf
-    # Calculate offsets for each grid
-    grid_x = torch.arange(grid_size).repeat(grid_size, 1).view([1, 1, grid_size, grid_size]).type(torch.FloatTensor)
-    grid_y = torch.arange(grid_size).repeat(grid_size, 1).t().view([1, 1, grid_size, grid_size]).type(torch.FloatTensor)
-    scaled_anchors = torch.FloatTensor([(a_w / stride, a_h / stride) for a_w, a_h in anchors])
+        input.view(num_batches, num_anchors, 5, grid_size, grid_size)
+        .permute(0, 1, 3, 4, 2)
+        .contiguous()
+    )  # Remodelage des prédictions du modèle
+    # Récupération des sorties
+    x = torch.sigmoid(prediction[..., 0])  # Centre x
+    y = torch.sigmoid(prediction[..., 1])  # Centre y
+    w = prediction[..., 2]  # Largeur
+    h = prediction[..., 3]  # Hauteur
+    pred_conf = torch.sigmoid(prediction[..., 4])  # Confiance
+    # Calcul des décalages pour chaque cellule de la grille
+    grid_x = (
+        torch.arange(grid_size)
+        .repeat(grid_size, 1)
+        .view([1, 1, grid_size, grid_size])
+        .type(torch.FloatTensor)
+    )
+    grid_y = (
+        torch.arange(grid_size)
+        .repeat(grid_size, 1)
+        .t()
+        .view([1, 1, grid_size, grid_size])
+        .type(torch.FloatTensor)
+    )
+    scaled_anchors = torch.FloatTensor(
+        [(a_w / stride, a_h / stride) for a_w, a_h in anchors]
+    )
     anchor_w = scaled_anchors[:, 0:1].view((1, num_anchors, 1, 1))
     anchor_h = scaled_anchors[:, 1:2].view((1, num_anchors, 1, 1))
-    # Add offset and scale with anchors
+    # Ajout de l'offset et mise à l'échelle avec les ancres
     pred_boxes = torch.FloatTensor(prediction[..., :4].shape)
     pred_boxes[..., 0] = x.data + grid_x
     pred_boxes[..., 1] = y.data + grid_y
@@ -120,17 +150,17 @@ def loss(input, target, anchors, inp_dim, num_anchors=3):
         grid_size=grid_size,
         num_anchors=num_anchors,
     )
-    # Handle target variables
+    # Traitement des variables cibles
     tx, ty = tx.type(torch.FloatTensor), ty.type(torch.FloatTensor)
     tw, th = tw.type(torch.FloatTensor), th.type(torch.FloatTensor)
     tconf = tconf.type(torch.FloatTensor)
     mask = mask.type(torch.ByteTensor)
-    mse_loss = nn.MSELoss(reduction="sum")  # Coordinate loss
-    bce_loss = nn.BCELoss(reduction="sum")  # Confidence loss
+    mse_loss = nn.MSELoss(reduction="sum")  # Perte des coordonnées
+    bce_loss = nn.BCELoss(reduction="sum")  # Perte de confiance
     loss_x = mse_loss(x[mask], tx[mask])
     loss_y = mse_loss(y[mask], ty[mask])
     loss_w = mse_loss(w[mask], tw[mask])
     loss_h = mse_loss(h[mask], th[mask])
     loss_conf = bce_loss(pred_conf, tconf)
-    loss = loss_x + loss_y + loss_w + loss_h + loss_conf
+    loss = loss_x + loss_y + loss_w + loss_h + loss_conf  # Perte totale
     return (loss, loss_x, loss_y, loss_w, loss_h, loss_conf)
